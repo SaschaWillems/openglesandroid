@@ -41,3 +41,4 @@ proguard/
 # Log Files
 *.log
 stlviewer/libs/android-support-v4.jar
+CameraTexture/libs/android-support-v4.jar
