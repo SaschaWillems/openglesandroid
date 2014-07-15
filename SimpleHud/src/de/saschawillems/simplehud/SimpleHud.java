@@ -10,12 +10,12 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.util.ArrayList;
+import java.util.Observable;
 
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.Paint;
 import android.graphics.Point;
 import android.opengl.GLES20;
 import android.opengl.GLUtils;
@@ -29,7 +29,7 @@ import android.view.WindowManager;
  * @author Sascha Willems
  *
  */
-public class SimpleHud {
+public class SimpleHud extends Observable {
 	
 	private Context mContext;
 	private float mAspectRatio = 1.0f;	
@@ -39,9 +39,6 @@ public class SimpleHud {
 	private FloatBuffer mVertexBuffer;
 	private FloatBuffer mTexCoordBuffer;
 	private ArrayList<SimpleHudElement> mHudElements = new ArrayList<SimpleHudElement>();
-	
-	// TODO : test
-	private Point mScreenHitMarker = new Point();
 	
 	/**
 	 * Constructor for GLSimpleHUD
@@ -88,12 +85,7 @@ public class SimpleHud {
     	for (SimpleHudElement hudElement : mHudElements) {
     		mCanvas.drawText(hudElement.getText(), hudElement.getPosition().x, hudElement.getPosition().y, hudElement.getTextPaint());
     	}
-   
-    	Paint paint = new Paint();
-        paint.setColor(Color.RED);
-        paint.setStrokeWidth(3);    	
-    	mCanvas.drawCircle(mScreenHitMarker.x, mScreenHitMarker.y, 8.0f, paint);
-    	
+       	
     	mCanvas.restore();
    	
     	// Upload our bitmap to OpenGL. We use texSubImage this time as it's faster
@@ -152,26 +144,20 @@ public class SimpleHud {
 	 * @param event
 	 */
 	public void touchEvent(MotionEvent event) {
-		// Since our hud texture has different dimensions than the screen, we need to scale the event coordinates
+		// Since our hud texture has different dimensions than the screen, we need to scale the event coordinates 
+		// to match our virtual hud coordinates
 		
 		WindowManager wm = (WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE);
 		Display display = wm.getDefaultDisplay();			
 		Point size = new Point();
 		display.getSize(size);
-    	
-		Point screenPos = new Point((int)(event.getX()), (int)(event.getY()));
-		
-		mScreenHitMarker = screenPos;
-				  
-		float x = 512.0f / size.x * (float)event.getX(); 
-		float y = 512.0f / size.y * (float)event.getY(); 
-		
-		mScreenHitMarker.x =(int)x;
-		mScreenHitMarker.y =(int)y;
-	
+    							 
+		Point hitPoint = new Point((int)(512.0f / size.x * (float)event.getX()), (int)(512.0f / size.y * (float)event.getY())); 
+			
 		for (SimpleHudElement hudElement : mHudElements) {
-			if (hudElement.pointInElement(mScreenHitMarker)) {
-				hudElement.select();
+			if (hudElement.pointInElement(hitPoint)) {
+				setChanged();
+				notifyObservers(hudElement.getName());
 			}
 		}
 	}

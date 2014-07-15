@@ -65,14 +65,10 @@ public class SimpleHudElement {
 	public boolean pointInElement(Point point) {
 		Rect boundsRect = new Rect();
 		mTextPaint.getTextBounds(mText, 0, mText.length(), boundsRect);
-		return ( (point.x >= mPosition.x) & (point.x <= mPosition.x + boundsRect.width()) & (point.y >= mPosition.y) & (point.y <= mPosition.y + boundsRect.height()) );
+		
+		int offsetX = (mTextPaint.getTextAlign() == Paint.Align.CENTER) ? -boundsRect.width() / 2 : 0; 
+		
+		return ( (point.x >= mPosition.x + boundsRect.left + offsetX) & (point.x <= mPosition.x + boundsRect.left + boundsRect.width() + offsetX) & (point.y >= mPosition.y - boundsRect.height()) & (point.y <= mPosition.y) );
 	}
-	
-	/**
-	 * A "dummy" function that is called when the hud selects an item, e.g. when the user touches it 
-	 */
-	public void select() {
-		mTextPaint.setARGB(0xff, 0xff, 0x00, 0x00);
-	}
-	
+		
 }

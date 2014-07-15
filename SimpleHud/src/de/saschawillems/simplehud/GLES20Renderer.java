@@ -9,10 +9,13 @@ package de.saschawillems.simplehud;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
+import java.util.Observable;
+import java.util.Observer;
 
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 
+import android.app.AlertDialog;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -32,10 +35,46 @@ import android.view.ScaleGestureDetector;
  * @author Sascha Willems
  *
  */
-class GLES20Renderer implements GLSurfaceView.Renderer {
+class GLES20Renderer implements GLSurfaceView.Renderer, Observer {
 
 	public Context mContext;
+	    
+    private FloatBuffer mCubeVertices;
+    private FloatBuffer mCubeTexCoords;
+
+    private final String mVertexShader =
+        "uniform mat4 uMVPMatrix;\n" +
+        "attribute vec4 aPosition;\n" +
+        "attribute vec2 aTextureCoord;\n" +
+        "varying vec2 vTextureCoord;\n" +
+        "void main() {\n" +
+        "  gl_Position = uMVPMatrix * aPosition;\n" +
+        "  vTextureCoord = aTextureCoord;\n" +
+        "}\n";
+
+    private final String mFragmentShader =
+      "#extension GL_OES_EGL_image_external : require\n" +
+      "precision mediump float;\n" +
+      "uniform sampler2D sTexture;\n" +           
+      "varying vec2 vTextureCoord;\n" +
+      "void main() {\n" +
+      "  gl_FragColor = texture2D(sTexture, vTextureCoord);\n" +
+      "}";
+
+    
+    private float[] mMVPMatrix = new float[16];
+    private float[] mProjMatrix = new float[16];
+    private float[] mMMatrix = new float[16];
+    private float[] mVMatrix = new float[16];
+	private float[] mAccumulatedRotation = new float[16];
 	
+    private int mProgramID;
+    private int muMVPMatrixHandle;
+    private int maPositionHandle;
+    private int maTextureHandle;
+
+    private static String TAG = "GLES20Renderer";
+		
 	private int[] cubeTexture;
 	
 	private double mLastTime;
@@ -73,10 +112,10 @@ class GLES20Renderer implements GLSurfaceView.Renderer {
 	        0,0, 1,0, 0,1, 1,1
 	    };    
     		     	    	
-        mCubeVertices = ByteBuffer.allocateDirect(cubeVertices.length * FLOAT_SIZE_BYTES).order(ByteOrder.nativeOrder()).asFloatBuffer();
+        mCubeVertices = ByteBuffer.allocateDirect(cubeVertices.length * 4).order(ByteOrder.nativeOrder()).asFloatBuffer();
         mCubeVertices.put(cubeVertices).position(0);
         
-        mCubeTexCoords = ByteBuffer.allocateDirect(cubeTexCoords.length * FLOAT_SIZE_BYTES).order(ByteOrder.nativeOrder()).asFloatBuffer();
+        mCubeTexCoords = ByteBuffer.allocateDirect(cubeTexCoords.length * 4).order(ByteOrder.nativeOrder()).asFloatBuffer();
         mCubeTexCoords.put(cubeTexCoords).position(0);  
         
         Matrix.setIdentityM(mAccumulatedRotation, 0);
@@ -218,23 +257,28 @@ class GLES20Renderer implements GLSurfaceView.Renderer {
      */
     private void setupHud() {
     	mSimpleHUD = new SimpleHud(mContext);
+    	
+    	// Add some elements to our hud
     	SimpleHudElement hudElement;
-    	mSimpleHUD.addHudElement("fpscounter", "", new Point(5, 25));
-    	hudElement = mSimpleHUD.addHudElement("", "Menu", new Point(256, 120));
+    	mSimpleHUD.addHudElement("fpscounter", "", new Point(25, 25));
+    	hudElement = mSimpleHUD.addHudElement("menu", "Menu", new Point(256, 120));
     	hudElement.getTextPaint().setTextAlign(Paint.Align.CENTER);    														
     	hudElement.getTextPaint().setTextSize(48);    														
-    	hudElement = mSimpleHUD.addHudElement("", "New Game", new Point(256, 200));
+    	hudElement = mSimpleHUD.addHudElement("newgame", "New Game", new Point(256, 200));
     	hudElement.getTextPaint().setTextAlign(Paint.Align.CENTER);    														
     	hudElement.getTextPaint().setTextSize(48);    														
-    	hudElement = mSimpleHUD.addHudElement("", "Settings", new Point(256, 260));
+    	hudElement = mSimpleHUD.addHudElement("settings", "Settings", new Point(256, 260));
     	hudElement.getTextPaint().setTextAlign(Paint.Align.CENTER);    														
     	hudElement.getTextPaint().setTextSize(48);    														
-    	hudElement = mSimpleHUD.addHudElement("", "About", new Point(256, 320));
+    	hudElement = mSimpleHUD.addHudElement("about", "About", new Point(256, 320));
     	hudElement.getTextPaint().setTextAlign(Paint.Align.CENTER);    														
     	hudElement.getTextPaint().setTextSize(48);    														
-    	hudElement = mSimpleHUD.addHudElement("", "Quit", new Point(256, 500));
+    	hudElement = mSimpleHUD.addHudElement("quit", "Quit", new Point(256, 500));
     	hudElement.getTextPaint().setTextAlign(Paint.Align.CENTER);    														
-    	hudElement.getTextPaint().setTextSize(48);    														
+    	hudElement.getTextPaint().setTextSize(48);
+    	
+    	// Add our renderer as an observer to the HUD, so we can react to selected elements
+    	mSimpleHUD.addObserver(this);
     }
 
     private int loadShader(int shaderType, String source) {
@@ -298,44 +342,21 @@ class GLES20Renderer implements GLSurfaceView.Renderer {
         
     }
        
-    private static final int FLOAT_SIZE_BYTES = 4;
-      
-    private FloatBuffer mCubeVertices;
-    private FloatBuffer mCubeTexCoords;
+	@Override
+	public void update(Observable arg0, Object arg1) {
 
-    private final String mVertexShader =
-        "uniform mat4 uMVPMatrix;\n" +
-        "attribute vec4 aPosition;\n" +
-        "attribute vec2 aTextureCoord;\n" +
-        "varying vec2 vTextureCoord;\n" +
-        "void main() {\n" +
-        "  gl_Position = uMVPMatrix * aPosition;\n" +
-        "  vTextureCoord = aTextureCoord;\n" +
-        "}\n";
-
-    private final String mFragmentShader =
-      "#extension GL_OES_EGL_image_external : require\n" +
-      "precision mediump float;\n" +
-      "uniform sampler2D sTexture;\n" +                             // Access to the camera texture requires a special sampler
-//      "uniform samplerExternalOES sTexture;\n" +                             // Access to the camera texture requires a special sampler
-      "varying vec2 vTextureCoord;\n" +
-      "void main() {\n" +
-      "  gl_FragColor = texture2D(sTexture, vTextureCoord);\n" +
-      "}";
-
-    
-    private float[] mMVPMatrix = new float[16];
-    private float[] mProjMatrix = new float[16];
-    private float[] mMMatrix = new float[16];
-    private float[] mVMatrix = new float[16];
-	private float[] mAccumulatedRotation = new float[16];
-	
-    private int mProgramID;
-    private int muMVPMatrixHandle;
-    private int maPositionHandle;
-    private int maTextureHandle;
-
-    private static String TAG = "GLES20Renderer";
+			// Check if observed object is hud
+			if (arg0 == mSimpleHUD) {
+				
+		        new AlertDialog.Builder(mContext)
+	            .setTitle("SimpleHud")
+	            .setMessage("Element \"" + arg1 + "\" selected")
+	            .setPositiveButton("OK", null)
+	            .show();				
+				
+			}
+		
+	}
           
 }
 
